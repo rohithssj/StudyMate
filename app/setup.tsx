@@ -72,54 +72,57 @@ export default function SetupScreen() {
           </View>
         </View>
 
-        <View className="mb-8">
-          <Text className="text-[11px] tracking-widest uppercase text-textMuted font-mono mb-3">
-            Difficulty
-          </Text>
-          <View className="flex-row gap-3">
-            {Object.keys(difficultyMap).map((d) => (
-              <TouchableOpacity
-                key={d}
-                onPress={() => setDifficulty(d)}
-                className={`flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border ${
-                  difficulty === d 
-                    ? 'border-accent/40 bg-accent/10' 
-                    : 'border-border bg-surface'
-                }`}
-              >
-                <View 
-                  className="w-2 h-2 rounded-full" 
-                  style={{ backgroundColor: difficultyMap[d] }} 
-                />
-                <Text className={`text-[14px] ${difficulty === d ? 'text-accent' : 'text-textSecondary'}`}>
-                  {d}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
+        {isMentor && (
+          <>
+            <View className="mb-8">
+              <Text className="text-[11px] tracking-widest uppercase text-textMuted font-mono mb-3">
+                Difficulty
+              </Text>
+              <View className="flex-row gap-3">
+                {Object.keys(difficultyMap).map((d) => (
+                  <TouchableOpacity
+                    key={d}
+                    onPress={() => setDifficulty(d)}
+                    className={`flex-1 flex-row items-center justify-center gap-2 py-3 rounded-xl border ${
+                      difficulty === d 
+                        ? 'border-accent/40 bg-accent/10' 
+                        : 'border-border bg-surface'
+                    }`}
+                  >
+                    <View 
+                      className="w-2 h-2 rounded-full" 
+                      style={{ backgroundColor: difficultyMap[d] }} 
+                    />
+                    <Text className={`text-[14px] ${difficulty === d ? 'text-accent' : 'text-textSecondary'}`}>
+                      {d}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
 
-        <View className="mb-8">
-          <Text className="text-[11px] tracking-widest uppercase text-textMuted font-mono mb-3">
-            Questions: {count}
-          </Text>
-          {/* Simple custom segmented control instead of range slider since React Native doesn't have a built-in range slider */}
-          <View className="flex-row gap-3">
-             {[3, 5, 8, 10].map((num) => (
-               <TouchableOpacity
-                 key={num}
-                 onPress={() => setCount(num)}
-                 className={`flex-1 items-center justify-center py-2.5 rounded-lg border ${
-                   count === num ? 'border-accent bg-accent/20' : 'border-border bg-surface'
-                 }`}
-               >
-                 <Text className={`text-[14px] ${count === num ? 'text-accent font-medium' : 'text-textSecondary'}`}>
-                   {num}
-                 </Text>
-               </TouchableOpacity>
-             ))}
-          </View>
-        </View>
+            <View className="mb-8">
+              <Text className="text-[11px] tracking-widest uppercase text-textMuted font-mono mb-3">
+                Questions: {count}
+              </Text>
+              <View className="flex-row gap-3">
+                {[3, 5, 8, 10].map((num) => (
+                  <TouchableOpacity
+                    key={num}
+                    onPress={() => setCount(num)}
+                    className={`flex-1 items-center justify-center py-2.5 rounded-lg border ${
+                      count === num ? 'border-accent bg-accent/20' : 'border-border bg-surface'
+                    }`}
+                  >
+                    <Text className={`text-[14px] ${count === num ? 'text-accent font-medium' : 'text-textSecondary'}`}>
+                      {num}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <View className="px-6 pb-10 pt-2">

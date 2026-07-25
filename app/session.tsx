@@ -70,9 +70,11 @@ export default function SessionScreen() {
         if (data.response.explanation) {
           appendedMsgs.push({ from: 'gemma', text: data.response.explanation });
         }
-        if (data.response.evaluation || data.response.feedback) {
-          const feedbackText = [data.response.evaluation, data.response.feedback].filter(Boolean).join('\n\n');
-          appendedMsgs.push({ from: 'gemma', kind: 'feedback', text: feedbackText, verdict: 'partial' });
+        if (data.response.evaluation) {
+          appendedMsgs.push({ from: 'gemma', kind: 'feedback', text: data.response.evaluation, verdict: 'partial' });
+        }
+        if (data.response.feedback) {
+          appendedMsgs.push({ from: 'gemma', kind: 'feedback', text: data.response.feedback, verdict: 'partial' });
         }
         if (data.response.question) {
           appendedMsgs.push({ from: 'gemma', text: data.response.question });
