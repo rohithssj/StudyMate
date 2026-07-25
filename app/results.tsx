@@ -6,13 +6,22 @@ const mockReport = {
   score: 78,
   strengths: ['Clear grasp of core concept', 'Answers structured logically'],
   improve: ['Missed edge cases under pressure', 'Explanations run long — tighten to key point first'],
+  improvements: ['Missed edge cases under pressure', 'Explanations run long — tighten to key point first'],
   recommendations: ['Revisit closures before your next session', 'Practice explaining answers in under 30s'],
 };
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const { mode, topic } = useLocalSearchParams<{ mode: string, topic: string }>();
-  const r = mockReport;
+  const { mode, topic, report } = useLocalSearchParams<{ mode: string, topic: string, report?: string }>();
+  
+  let r = mockReport;
+  if (report) {
+    try {
+      r = JSON.parse(report);
+    } catch (e) {
+      console.error('Failed to parse report param', e);
+    }
+  }
 
   return (
     <View className="flex-1 bg-bg">
@@ -41,7 +50,7 @@ export default function ResultsScreen() {
             icon={<AlertCircle size={18} color="#EAB308" />} 
             color="#EAB308" 
             title="Areas to improve" 
-            items={r.improve} 
+            items={r.improvements || r.improve || []} 
           />
           <ReportCard 
             icon={<Sparkles size={18} color="#F97316" />} 

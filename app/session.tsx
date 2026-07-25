@@ -3,39 +3,23 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView, Animated } from 'r
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Clock, ArrowUp } from 'lucide-react-native';
 
-function mockGemmaTurn({ mode, topic, step, count }: { mode: string; topic: string; step: number; count: number }) {
-  if (step === 0) {
-    return { 
-      type: 'explain', 
-      text: mode === 'mentor'
-        ? `${topic} — quick primer: think of it as the mechanism that lets a component keep state across re-renders without a class. We'll build from a definition, then I'll test you.`
-        : `Let's start the ${topic} interview. I'll ask ${count} questions, gauge your answers, and adjust difficulty as we go.` 
-    };
-  }
-  return { 
-    type: 'question', 
-    text: mode === 'mentor'
-      ? `Question ${step}/${count} — What problem does this solve that plain variables inside a function body can't?`
-      : `Question ${step}/${count} — Walk me through how you'd approach this.` 
-  };
-}
+import Constants from 'expo-constants';
 
-function mockFeedback() {
-  const good = Math.random() > 0.35;
-  return good
-    ? { verdict: 'good', text: 'Solid — you nailed the core mechanism. One nuance to sharpen: mention why the reference stays stable across renders.' }
-    : { verdict: 'partial', text: 'Partially there. You have the right direction, but the explanation of why it persists needs more precision.' };
-}
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost?.split(':')[0] || 'localhost';
+const DEFAULT_API_URL = `http://${localhost}:3000`;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 
 export default function SessionScreen() {
   const router = useRouter();
-  const { mode, topic, difficulty, count } = useLocalSearchParams<{ mode: string, topic: string, difficulty: string, count: string }>();
-  const totalQuestions = parseInt(count || '5', 10);
+  const { mode, topic, difficulty } = useLocalSearchParams<{ mode: string, topic: string, difficulty: string }>();
+  const totalQuestions = 3; // Enforce exactly 3 questions per requirements
   
   const [messages, setMessages] = useState<any[]>([]);
   const [step, setStep] = useState(0);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -44,45 +28,81 @@ export default function SessionScreen() {
     return () => clearInterval(t); 
   }, []);
 
+  const fetchAIResponse = async (currentMsgs: any[], currentStep: number) => {
+    setThinking(true);
+    setError(null);
+    
+    const currentQuestion = currentStep + 1;
+    const isFinal = currentQuestion > totalQuestions;
+    const conversationHistory = currentMsgs.map(m => ({
+      role: m.from === 'user' ? 'user' : 'assistant',
+      content: m.text
+    }));
+    
+    const payloadHistory = isFinal ? conversationHistory : conversationHistory.slice(-4);
+    const endpoint = mode === 'mentor' ? '/mentor' : '/interview';
+    const payload = mode === 'mentor' 
+      ? { topic, difficulty, conversationHistory: payloadHistory, currentQuestion }
+      : { role: topic, difficulty, conversationHistory: payloadHistory, currentQuestion };
+
+    try {
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error('API request failed');
+      const data = await response.json();
+      
+      if (data.success === false) {
+        throw new Error(data.error || 'The AI returned an invalid response. Please try again.');
+      }
+
+      if (data.completed && data.report) {
+        router.replace({
+          pathname: '/results',
+          params: { mode, topic, report: JSON.stringify(data.report) }
+        });
+      } else if (data.response) {
+        const appendedMsgs: any[] = [];
+        if (data.response.explanation) {
+          appendedMsgs.push({ from: 'gemma', text: data.response.explanation });
+        }
+        if (data.response.evaluation || data.response.feedback) {
+          const feedbackText = [data.response.evaluation, data.response.feedback].filter(Boolean).join('\n\n');
+          appendedMsgs.push({ from: 'gemma', kind: 'feedback', text: feedbackText, verdict: 'partial' });
+        }
+        if (data.response.question) {
+          appendedMsgs.push({ from: 'gemma', text: data.response.question });
+        }
+        setMessages([...currentMsgs, ...appendedMsgs]);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Network error. Please check the server.');
+    } finally {
+      setThinking(false);
+    }
+  };
+
   useEffect(() => { 
-    pushGemmaTurn(0); 
+    fetchAIResponse([], 0);
   }, []);
 
-  function pushGemmaTurn(nextStep: number) {
-    setThinking(true);
-    setTimeout(() => {
-      const turn = mockGemmaTurn({ mode, topic, step: nextStep, count: totalQuestions });
-      setMessages((m) => [...m, { from: 'gemma', kind: turn.type, text: turn.text }]);
-      setThinking(false);
-      if (turn.type === 'explain') {
-        setTimeout(() => pushGemmaTurn(1), 500);
-      }
-    }, 900);
+  async function handleSend() {
+    if (!input.trim() || thinking) return;
+    const userMsg = { from: 'user', text: input };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInput('');
+    const nextStep = step + 1;
+    setStep(nextStep);
+    await fetchAIResponse(newMessages, nextStep);
   }
 
-  function handleSend() {
-    if (!input.trim()) return;
-    setMessages((m) => [...m, { from: 'user', text: input }]);
-    setInput('');
-    setThinking(true);
-    
-    setTimeout(() => {
-      const fb = mockFeedback();
-      setMessages((m) => [...m, { from: 'gemma', kind: 'feedback', verdict: fb.verdict, text: fb.text }]);
-      setThinking(false);
-      
-      if (step + 1 >= totalQuestions) {
-        setTimeout(() => {
-          router.push({
-            pathname: '/results',
-            params: { mode, topic }
-          });
-        }, 900);
-      } else {
-        setStep((s) => s + 1);
-        setTimeout(() => pushGemmaTurn(step + 2), 700);
-      }
-    }, 1100);
+  async function handleRetry() {
+    await fetchAIResponse(messages, step);
   }
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
@@ -120,6 +140,22 @@ export default function SessionScreen() {
         <View className="flex-col gap-5 pb-20">
           {messages.map((m, i) => <Bubble key={i} msg={m} />)}
           {thinking && <TypingBubble />}
+          {error && (
+            <View className="flex-row justify-start">
+              <View className="max-w-[85%]">
+                <View className="flex-row items-center gap-1.5 mb-2">
+                  <View className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                  <Text className="font-mono text-[10px] text-red-500 tracking-widest uppercase">System Error</Text>
+                </View>
+                <View className="px-4 py-3 bg-surfaceAlt rounded-2xl rounded-tl-sm border-l-2 border-red-500">
+                  <Text className="text-[15px] text-textPrimary leading-6">{error}</Text>
+                  <TouchableOpacity onPress={handleRetry} className="mt-4 bg-red-500/10 border border-red-500/30 py-2 rounded-lg items-center">
+                    <Text className="text-red-500 font-semibold text-[14px]">Retry Request</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
 
