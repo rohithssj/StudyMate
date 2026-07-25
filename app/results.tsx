@@ -44,20 +44,28 @@ export default function ResultsScreen() {
             icon={<CheckCircle2 size={18} color="#22C55E" />} 
             color="#22C55E" 
             title="Strengths" 
-            items={r.strengths} 
+            items={r.strengths || []} 
           />
           <ReportCard 
             icon={<AlertCircle size={18} color="#EAB308" />} 
             color="#EAB308" 
             title="Areas to improve" 
-            items={r.improvements || r.improve || []} 
+            items={r.weaknesses || r.improvements || r.improve || []} 
           />
           <ReportCard 
             icon={<Sparkles size={18} color="#F97316" />} 
             color="#F97316" 
             title="Recommendations" 
-            items={r.recommendations} 
+            items={r.topicsToImprove || r.recommendations || []} 
           />
+          
+          {(r.motivation || r.summary) && (
+            <View className="px-5 py-4 mt-2 bg-accent/10 border border-accent/20 rounded-2xl items-center">
+              <Text className="text-[15px] font-medium text-accent text-center leading-6">
+                {r.motivation || r.summary}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 

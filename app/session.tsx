@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, Animated } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, FlatList, KeyboardAvoidingView, Platform, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Clock, ArrowUp } from 'lucide-react-native';
 
@@ -13,7 +13,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
 export default function SessionScreen() {
   const router = useRouter();
   const { mode, topic, difficulty } = useLocalSearchParams<{ mode: string, topic: string, difficulty: string }>();
-  const totalQuestions = 3; // Enforce exactly 3 questions per requirements
+  const totalQuestions = 3; 
   
   const [messages, setMessages] = useState<any[]>([]);
   const [step, setStep] = useState(0);
@@ -21,7 +21,7 @@ export default function SessionScreen() {
   const [thinking, setThinking] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
-  const scrollViewRef = useRef<ScrollView>(null);
+  const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => { 
     const t = setInterval(() => setSeconds((s) => s + 1), 1000); 
@@ -31,6 +31,7 @@ export default function SessionScreen() {
   const fetchAIResponse = async (currentMsgs: any[], currentStep: number) => {
     setThinking(true);
     setError(null);
+    scrollToBottom();
     
     const currentQuestion = currentStep + 1;
     const isFinal = currentQuestion > totalQuestions;
@@ -39,11 +40,11 @@ export default function SessionScreen() {
       content: m.text
     }));
     
-    const payloadHistory = isFinal ? conversationHistory : conversationHistory.slice(-4);
+    const payloadHistory = isFinal ? conversationHistory : conversationHistory.slice(-2);
     const endpoint = mode === 'mentor' ? '/mentor' : '/interview';
     const payload = mode === 'mentor' 
       ? { topic, difficulty, conversationHistory: payloadHistory, currentQuestion }
-      : { role: topic, difficulty, conversationHistory: payloadHistory, currentQuestion };
+      : { role: topic, conversationHistory: payloadHistory, currentQuestion };
 
     try {
       const response = await fetch(`${API_URL}${endpoint}`, {
@@ -56,7 +57,7 @@ export default function SessionScreen() {
       const data = await response.json();
       
       if (data.success === false) {
-        throw new Error(data.error || 'The AI returned an invalid response. Please try again.');
+        throw new Error(data.error);
       }
 
       if (data.completed && data.report) {
@@ -83,6 +84,7 @@ export default function SessionScreen() {
       setError(err.message || 'Network error. Please check the server.');
     } finally {
       setThinking(false);
+      scrollToBottom();
     }
   };
 
@@ -90,12 +92,20 @@ export default function SessionScreen() {
     fetchAIResponse([], 0);
   }, []);
 
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+
   async function handleSend() {
     if (!input.trim() || thinking) return;
     const userMsg = { from: 'user', text: input };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
+    scrollToBottom();
+    
     const nextStep = step + 1;
     setStep(nextStep);
     await fetchAIResponse(newMessages, nextStep);
@@ -109,79 +119,92 @@ export default function SessionScreen() {
   const ss = String(seconds % 60).padStart(2, '0');
   const progressPct = Math.min(100, (step / totalQuestions) * 100);
 
-  return (
-    <View className="flex-1 bg-bg">
-      <View className="pt-16 px-5 pb-3 border-b border-border bg-surface">
-        <View className="flex-row items-center justify-between mb-3">
-          <TouchableOpacity onPress={() => router.replace('/home')} className="p-1">
-            <X size={20} color="#A1A1AA" />
-          </TouchableOpacity>
-          <Text className="font-mono text-[13px] text-textSecondary uppercase tracking-wider">
-            Question {Math.min(step, totalQuestions)}/{totalQuestions}
-          </Text>
-          <View className="flex-row items-center gap-1.5 bg-surfaceAlt px-2 py-1 rounded-md">
-            <Clock size={13} color="#A1A1AA" />
-            <Text className="font-mono text-[13px] text-textSecondary">{mm}:{ss}</Text>
+  const renderFooter = () => (
+    <View className="pb-4">
+      {thinking && <TypingBubble />}
+      {error && (
+        <View className="flex-row justify-start mt-2">
+          <View className="max-w-[85%]">
+            <View className="flex-row items-center gap-1.5 mb-2">
+              <View className="w-1.5 h-1.5 rounded-full bg-red-500" />
+              <Text className="font-mono text-[10px] text-red-500 tracking-widest uppercase">System Error</Text>
+            </View>
+            <View className="px-4 py-3 bg-surfaceAlt rounded-2xl rounded-tl-sm border-l-2 border-red-500">
+              <Text className="text-[15px] text-textPrimary leading-6">{error}</Text>
+              <TouchableOpacity onPress={handleRetry} className="mt-4 bg-red-500/10 border border-red-500/30 py-2 rounded-lg items-center">
+                <Text className="text-red-500 font-semibold text-[14px]">Retry Request</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-        <View className="h-1.5 w-full rounded-full bg-border overflow-hidden">
-          <View 
-            className="h-full bg-accent rounded-full transition-all" 
-            style={{ width: `${progressPct}%` }} 
-          />
-        </View>
-      </View>
-
-      <ScrollView 
-        ref={scrollViewRef}
-        className="flex-1 px-5 pt-5 pb-20"
-        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-      >
-        <View className="flex-col gap-5 pb-20">
-          {messages.map((m, i) => <Bubble key={i} msg={m} />)}
-          {thinking && <TypingBubble />}
-          {error && (
-            <View className="flex-row justify-start">
-              <View className="max-w-[85%]">
-                <View className="flex-row items-center gap-1.5 mb-2">
-                  <View className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                  <Text className="font-mono text-[10px] text-red-500 tracking-widest uppercase">System Error</Text>
-                </View>
-                <View className="px-4 py-3 bg-surfaceAlt rounded-2xl rounded-tl-sm border-l-2 border-red-500">
-                  <Text className="text-[15px] text-textPrimary leading-6">{error}</Text>
-                  <TouchableOpacity onPress={handleRetry} className="mt-4 bg-red-500/10 border border-red-500/30 py-2 rounded-lg items-center">
-                    <Text className="text-red-500 font-semibold text-[14px]">Retry Request</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-      </ScrollView>
-
-      <View className="absolute bottom-0 left-0 right-0 px-5 pb-8 pt-3 border-t border-border bg-bg">
-        <View className="flex-row items-center gap-2 px-1 py-1 bg-surface border border-border rounded-full">
-          <TextInput
-            value={input}
-            onChangeText={setInput}
-            placeholder="Type your answer…"
-            placeholderTextColor="#71717A"
-            className="flex-1 bg-transparent text-textPrimary px-4 py-3 text-[15px]"
-            multiline
-            maxLength={500}
-          />
-          <TouchableOpacity 
-            disabled={!input.trim()} 
-            onPress={handleSend}
-            className={`w-10 h-10 rounded-full items-center justify-center mr-1 ${
-              input.trim() ? 'bg-accent' : 'bg-accent/40'
-            }`}
-          >
-            <ArrowUp size={20} color={input.trim() ? '#09090B' : '#00000080'} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      )}
     </View>
+  );
+
+  return (
+    <SafeAreaView className="flex-1 bg-bg">
+      <KeyboardAvoidingView 
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <View className="px-5 py-4 border-b border-border bg-surface">
+          <View className="flex-row items-center justify-between mb-3">
+            <TouchableOpacity onPress={() => router.replace('/home')} className="p-1">
+              <X size={20} color="#A1A1AA" />
+            </TouchableOpacity>
+            <Text className="font-mono text-[13px] text-textSecondary uppercase tracking-wider">
+              Question {Math.min(step, totalQuestions)}/{totalQuestions}
+            </Text>
+            <View className="flex-row items-center gap-1.5 bg-surfaceAlt px-2 py-1 rounded-md">
+              <Clock size={13} color="#A1A1AA" />
+              <Text className="font-mono text-[13px] text-textSecondary">{mm}:{ss}</Text>
+            </View>
+          </View>
+          <View className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+            <View 
+              className="h-full bg-accent rounded-full transition-all" 
+              style={{ width: `${progressPct}%` }} 
+            />
+          </View>
+        </View>
+
+        <FlatList 
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(_, i) => i.toString()}
+          renderItem={({ item }) => <Bubble msg={item} />}
+          contentContainerStyle={{ padding: 20, paddingBottom: 10, gap: 20 }}
+          onContentSizeChange={scrollToBottom}
+          onLayout={scrollToBottom}
+          ListFooterComponent={renderFooter}
+          showsVerticalScrollIndicator={false}
+        />
+
+        <View className="px-5 py-3 border-t border-border bg-bg">
+          <View className="flex-row items-end gap-2 px-1 py-1 bg-surface border border-border rounded-3xl">
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder="Type your answer…"
+              placeholderTextColor="#71717A"
+              className="flex-1 bg-transparent text-textPrimary px-4 py-3 text-[15px]"
+              multiline
+              maxLength={500}
+              style={{ minHeight: 45, maxHeight: 120 }}
+            />
+            <TouchableOpacity 
+              disabled={!input.trim() || thinking} 
+              onPress={handleSend}
+              className={`w-10 h-10 mb-1 rounded-full items-center justify-center mr-1 ${
+                input.trim() && !thinking ? 'bg-accent' : 'bg-accent/40'
+              }`}
+            >
+              <ArrowUp size={20} color={input.trim() && !thinking ? '#09090B' : '#00000080'} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
